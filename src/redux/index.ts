@@ -1,20 +1,26 @@
 // reducer
 import global from "./modules/global/reducer";
 import counter from "./modules/counter/reducer";
+import auth from './modules/auth/reducer'
 // type
 import { type RootState } from "./interface";
 import { GlobalStateAction } from "./modules/global/action";
 import { CounterAction } from "./modules/counter/action";
 
 // enhancer
-import { sayHiOnDispatch,includeMeaningOfLife } from "./enhancer";
+import { sayHiOnDispatch, includeMeaningOfLife } from "./enhancer";
 // middleware
-import { print1,print2,print3 } from "./middleware";
-import { combineReducers, createStore,compose, applyMiddleware } from "redux";
+import { print1, print2, print3, asyncFunctionMiddleware } from "./middleware";
+import { combineReducers, createStore, compose, applyMiddleware } from "redux";
 // devtools
 import { composeWithDevTools } from "@redux-devtools/extension";
+// redux-thunk 异步中间件
+import {thunk as thunkMiddleware} from 'redux-thunk'//^3.1.0
 
-type RootAction = GlobalStateAction | CounterAction;
+// configureSotre
+import { configureStore } from "@reduxjs/toolkit";
+
+type RootAction = GlobalStateAction | CounterAction | (() => void);
 
 function isGlobalStateAction (action: RootAction): action is GlobalStateAction {
   return 'global' in action;
@@ -38,14 +44,23 @@ const rootReducer2 = combineReducers({
 })
 
 // const composedEnhancers=compose(includeMeaningOfLife,sayHiOnDispatch)
-const middlewareEnhancers=applyMiddleware(print1,print2,print3)
+// const middlewareEnhancers = applyMiddleware(print1, print2, print3, asyncFunctionMiddleware)
+const middlewareEnhancers = applyMiddleware(print1, print2, print3, thunkMiddleware)
 
-const composedEnhancers=composeWithDevTools({
+const composedEnhancers = composeWithDevTools({
   //增加options
-})
+}) || compose
 
 // 使用createStore来创建store
 const store = createStore(rootReducer2, undefined, composedEnhancers(middlewareEnhancers));
 // createStore第二个参数接受一个初始值做参数
 
-export default store
+const rtkStore=configureStore({
+  reducer:{
+    global,
+    counter,
+    auth,
+  }
+})
+
+export default rtkStore

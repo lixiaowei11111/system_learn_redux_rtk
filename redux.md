@@ -6,7 +6,7 @@
 
 ## 1. `Actions`
 
-+ 一个`action`是一个普通的`JavaScript`对象，它有一个`type`字段。你可以把一个`action`看作是描述应用程序中发生的事件。
++ 一个`action`是一个普通的`JavaScript`对象，它**必须**有一个`type`字段。你可以把一个`action`看作是描述应用程序中发生的事件。
 
 + `type` 字段应该是一个字符串，给这个操作一个描述性的名称，比如 `"todos/todoAdded"`。我们通常会像这样写那个类型的字符串，`"domain/eventName"`，其中第一部分是这个操作所属的特性或类别，第二部分是发生的具体事情。
 
@@ -208,7 +208,6 @@ const rootReducer2 = combineReducers({
   counter,
 })
 
-// 使用createStore来创建store
 const store=createStore(rootReducer2);
 ```
 
@@ -590,3 +589,513 @@ export default UseReactRedux
   + 在整个`<App>`组件周围放置`<Provider store={store}>`，以便其他组件可以与`store`通信
 
 # 3. 异步逻辑和数据获取
+
++ 使用`redux`官方提供的中间件`redux-thunk`就行了,在`dispatch`时不在传入一个`action`对象,而是一个函数,在这个函数内部进行异步逻辑和`state`处理以及`dispatch`,如`dispatch((dispatch,getState)=>{//...异步逻辑})`,
++ Redux store本身并不了解异步逻辑。它只知道如何同步地`dispatch actions`，通过调用`root reducer`函数来更新状态，并通知`UI`有变化。
++ 任何异步都必须发生在`store`之外。
++ **Redux中间件被设计用来支持编写有副作用的逻辑。**
++ 当Redux中间件看到`dispatch action`时，它可以做任何事情:记录日志、修改action、延迟action、进行异步调用等等。此外，由于中间件围绕真正的商店形成了一个管道。`Dispatch`函数，这也意味着我们实际上可以传递一些不是普通`action`对象的东西来`Dispatch`，只要中间件拦截该值并且不让它到达`reducer`。
+
+## 3.1 自定义一个异步中间件
++ 调用异步数据的实际场景就是`store.dispatch(asyncFunc)`,思路就是检测在`dispatch`中的`action`参数是否为一个对象,还是一个函数,如下
+```JavaScript
+const asyncFunctionMiddleware = storeAPI => next => action => {
+// If the "action" is actually a function instead...
+if (typeof action === 'function') {
+  // then call the function and pass `dispatch` and `getState` as arguments
+  return action(storeAPI.dispatch, storeAPI.getState)
+}
+
+// Otherwise, it's a normal action - send it onwards
+return next(action)
+}
+```
++ 注册和调用异步中间件
+```JavaScript
+// 注册
+const middlewareEnhancers = applyMiddleware(print1, print2, print3, asyncFunctionMiddleware)
+const composedEnhancers = composeWithDevTools({
+  //增加options
+})||compose
+const store = createStore(rootReducer2, undefined, composedEnhancers(middlewareEnhancers));
+export default store
+// 组件中调用
+import { useSelector, useDispatch } from "react-redux"
+import { selectCount } from "../redux/modules/counter/selector"
+import { CounterActionTypeEnum } from "../redux/modules/counter/action"
+import { Button } from "antd"
+
+const fetchSomeData=()=>{
+  return new Promise((resolve,reject)=>{
+    setTimeout(()=>{
+      resolve(5)
+    },5000)
+  })
+}
+
+const UseReactRedux = () => {
+  const count=useSelector(selectCount)
+  const dispatch=useDispatch()
+
+  const handleAsyncIncrement=()=>{
+    const fetch=(dispatch,getState)=>{
+      fetchSomeData().then((res)=>{
+        const state=getState()
+        dispatch({type:CounterActionTypeEnum.INCREMENT,payload:res+state.counter.count})
+      })
+    }
+    // dispatch一个异步函数,进入中间件函数逻辑
+    dispatch(fetch);   
+  }
+  return (
+    <div>
+      <div>配合react_redux,从useSelector((state)=&gt;state.counter.count){count}</div>
+      <Button onClick={handleAsyncIncrement}>async +</Button>
+    </div>
+  )
+}
+export default UseReactRedux
+```
+
+## 3.2 `Redux` 异步数据流
++ 中间件和异步逻辑是如何影响`Redux`应用程序的整体数据流的呢?
++ 就像普通的操作一样，我们首先需要在应用程序中处理用户事件，例如单击按钮。然后，我们调用`dispatch()`，并传入一些东西，可以是普通的操作对象、函数，或者中间件可以查找的其他值。
++ 一旦分发的值到达中间件，它就可以进行异步调用，然后在异步调用完成时分发一个真正的`action`对象。
++ 之前，我们看到了一个表示正常同步`Redux`数据流的图。当我们向`Redux`应用程序添加异步逻辑时，我们添加了一个额外的步骤，中间件可以运行类似AJAX请求的逻辑，然后`dispatch actions`。这使得异步数据流看起来像这样:
+
+![redux async data flow](https://redux.js.org/assets/images/ReduxAsyncDataFlowDiagram-d97ff38a0f4da0f327163170ccc13e80.gif)
+
+## 3.3 Redux Thunk Middleware
+
++ `redux`其实已经有了`异步函数中间件`的官方版本,称为`Redux Thunk Middleware`
+
++ `thunk middleware`允许**编写以`dispatch`和`getState`为参数的函数**。`thunk`函数内部可以有任何我们想要的异步逻辑，并且该逻辑可以根据需要`dispatch` `actions`和读取`store`状态。
+
+  > “thunk”是一个编程术语，意思是“一段执行延迟工作的代码”。
+
++ 使用`redux`官方提供的`thunk middleware`,需要安装`redux-thunk`
++ 注册和使用和上述`3.1`的自定义中间件没有任何区别
+  
+```JavaScript
+// redux-thunk 异步中间件
+import {thunk as thunkMiddleware} from 'redux-thunk'//^3.1.0
+onst middlewareEnhancers = applyMiddleware(print1, print2, print3, thunkMiddleware)
+
+const composedEnhancers = composeWithDevTools({
+  //增加options
+}) || compose
+
+const store = createStore(rootReducer2, undefined, composedEnhancers(middlewareEnhancers));
+```
+
+# 4. 标准Redux模式`Standard Redux Pattern`
+
+## 4.1` Action`生成器函数`Action Creators`
++ 使用`distach`分发`action`对象时,通常都是以对象的形式分发的
+```JavaScript
+dispatch({ type: 'todos/todoAdded', payload: trimmedText })
+```
+
++ 然而，在实践中，编写良好的Redux应用程序实际上不会在我们`dispatch`它们时内联地编写这些`action`对象。相反，我们使用“action creator”函数。
+
++ `action creator`是一个创建并返回`action`对象的**函数**。我们通常使用这些，这样我们就不必每次都手动编写操作对象:
+
+```JavaScript
+export const incrementAction = (payload: number) => {
+  return {
+    type: CounterActionTypeEnum.INCREMENT,
+    payload,
+  }
+}
+export const decrementAction = (payload: number) => {
+  return {
+    type: CounterActionTypeEnum.DECREMENT,
+    payload,
+  }
+}
+```
++ 然后我们通过调用`action creator`来使用它们，然后将生成的`action`对象直接传递给`dispatch`
+```JavaScript
+const handleDecrement = () => {
+    dispatch(decrementAction(33))
+  }
+
+  const handleIncrement = () => { 
+    dispatch(incrementAction(44))
+  }
+```
++ 相当于之前的声明`action`字面量
+```JavaScript
+const handleDecrement = () => {
+    dispatch({type:CounterActionTypeEnum.DECREMENT,payload:33})
+  }
+
+  const handleIncrement = () => { 
+    dispatch({type:CounterActionTypeEnum.INCREMENT,payload:44})
+  }
+```
+
+
+## 4.2 Memoized Selectors
+
++ `useSelector`相当于一个`useMemo`,如果计算之后返回的引用不同(浅引用比较),会触发当前函数的`re-render`
+
++ 我们已经看到我们可以编写“选择器”函数，它接受Redux状态对象作为参数，并返回一个值:
+```JavaScript
+const selectTodos = state => state.todos
+```
++ 但是如果需要对数据进行处理再返回
+```JavaScript
+const selectTodoIds = state => state.todos.map(todo => todo.id)
+```
++ 然而，`array.map()`总是返回一个新的数组引用。`React-Redux`的`useSelector` `hook`会在每个`dispatch action`之后重新运行它的`selector`函数，**如果`selector`结果改变，它将强制组件重新渲染。**
+
++ 在上面的例子中，**调用`useSelector(selectTodoIds)`总是会导致组件在每个`action`之后重新渲染，因为它返回了一个新的数组引用!**
+
+### 1. 使用`memoized selector`
++ `Momoization`是一种缓存——具体来说，就是保存昂贵计算的结果，然后在以后遇到相同的输入时重用这些结果。
+
++ **`Memoized selector functions`**保存了最近的结果，如果用相同的输入多次调用它们，就会返回相同的结果。如果用与上次不同的输入调用它们，它们将重新计算一个新的结果值，缓存它，并返回新的结果。
+
+### 2. Memoizing Selectors with `createSelector`
+
++ `Reselect`库提供了`createSelector API`，可以生成记忆化的`selector`函数。`createSelector`接受一个或多个`input selector`函数和一个`output selector`作为参数，并返回新的`selector`函数。每次调用`selector`时:
+  1. 所有的`input selector`都会被所有的参数调用
+  2. 如果`input selector`的任何返回值发生了变化，`output selector`将重新运行
+  3. 所有`input selector`的结果都将成为`output selector`的参数
+  4. `output selector`的最终结果将被缓存以备下次使用
+
++ 手动安装`reselect`,使用其`createSelector`库
+```JavaScript
+// src/redux/modules/counter/selector.ts
+import { createSelector } from "reselect"
+
+export const selectCountByCreateSelector=createSelector(
+  // 传递一个或者多个 input selector
+  state=>state.counter.count,
+  // 一个输出选择器接受所有输入结果为参数,并返回最终结果
+  count=>count*2
+)
+// 使用
+import { useSelector, useDispatch } from "react-redux"
+import { selectCount,selectCountByCreateSelector } from "../redux/modules/counter/selector"
+
+const UseReactRedux = () => {
+  const count=useSelector(selectCount)
+
+  const dispatch=useDispatch()
+
+  const countByCreateSelector=useSelector(selectCountByCreateSelector)
+
+  return (
+    <div>
+      <div> relsect的createSelector记忆化函数countByCreateSelector{countByCreateSelector}</div>
+    </div>
+  )
+}
+
+export default UseReactRedux
+```
+### 3. `createSelector`的返回作为另外一个`createSelector`的`input selector`
++ 如
+```JavaScript
+import { createSelector } from 'reselect'
+import { StatusFilters } from '../filters/filtersSlice'
+
+// omit other code
+
+export const selectFilteredTodos = createSelector(
+  // 第一个inut selector: all todos
+  state => state.todos,
+  // 第二个input selector: current status filter
+  state => state.filters.status,
+  // Output selector: 按照顺序接收所有input selector计算的值
+  (todos, status) => {
+    if (status === StatusFilters.All) {
+      return todos
+    }
+
+    const completedStatus = status === StatusFilters.Completed
+    // Return either active or completed todos based on filter
+    return todos.filter(todo => todo.completed === completedStatus)
+  }
+)
+// 可以使用这个新的“filtered todos”选择器作为另一个选择器的输入
+export const selectFilteredTodoIds = createSelector(
+  // Pass our other memoized selector as an input
+  selectFilteredTodos,
+  // And derive data in the output selector
+  filteredTodos => filteredTodos.map(todo => todo.id)
+)
+```
+
+## 4.3 Flux Standard Action
++ `store`本身并不关心你在`action`对象中放入了什么字段。它只关心那个`action.type`的存在，并且是一个`string`。这意味着可以在`action`中放入任何其他字段。
+
++ 然而，如果每个`action`的数据字段都使用不同的字段名，那么就很难提前知道需要在每个`reducer`中处理哪些字段。
+
++ 这就是为什么`Redux`社区提出了`Flux Standard Actions(Flux Standard Actions)`规范，或称`FSA`。这是一种建议的方法，用于组织操作对象中的字段，以便开发人员始终知道哪些字段包含什么样的数据。`FSA`模式在`Redux`社区中被广泛使用
+
+### 1. [`FSA`的约定如下](https://redux.js.org/tutorials/fundamentals/part-7-standard-patterns#memoizing-selectors-with-createselector)
+1. 如果你的`action`对象有任何实际/业务数据，你的`action`的**数据值**应该始终保存在`action.payload`中
+2. 一个`action`也可以有一个`action.meta`。带有额外描述性数据的元字段
+3. 一个`action`可以有一个`action.error`。包含错误信息的Error字段
+
++ 因此`redux`的`action`必须:
+  + 是一个纯`JS`对象
+  + 这个对象必须有`type`属性,且为`string`类型
+
++ 如果使用`FSA`模式编写`action`，则可以使一个`action`额外有
+  1. have a `payload` field
+  2. have an`error` field
+  3. have a `meta` field
+
+
+## 4.4 [规范化state(`Normalized State`)](https://redux.js.org/tutorials/fundamentals/part-7-standard-patterns#normalized-state)
+
++ 在较大的`Redux`应用程序中，通常会将数据存储在规范化的状态结构中。 “规范化”意味着：
+  1. 确保每个数据片段只有一个副本
+  2. 以允许根据ID直接查找项目的方式存储项目
+  3. 基于ID引用其他项目，而不是复制整个项目
+
++ 例如，在一个博客应用程序中，你可能有指向用户和评论对象的帖子对象。可能有很多帖子是由同一个人发布的，所以如果每个帖子对象都包含整个用户对象，我们就会有很多相同用户对象的副本。相反，帖子对象会有一个用户ID值作为post.user，然后我们可以通过ID查找用户对象，如state.users[post.user]。
+
++ 这意味着我们通常将数据组织为对象而不是数组，其中项目ID是键，项目本身是值，如下所示：
+
++ 其实就是建议用`map`结构来存储
+```JavaScript
+const rootState = {
+  todos: {
+    status: 'idle',
+    entities: {
+      2: { id: 2, text: 'Buy milk', completed: false },
+      7: { id: 7, text: 'Clean room', completed: true }
+    }
+  }
+}
+```
+
+## 4.5 Thunks and Promises
+
+# 5. 使用`Redux Toolkit`的现代`redux`
+
++ 安装`reduxjs/toolkit`
+
+## 5.1 `configureStore`
+
++ 原来的`createStore`样板代码
+```JavaScript
+const rootReducer1 = (state: RootState, action: RootAction) => {
+  return {
+    global: isGlobalStateAction(action) ? global(state.global, action) : state.global,
+    counter: isCounterAction(action) ? counter(state.counter, action) : state.counter
+  }
+}
+const rootReducer2 = combineReducers({
+  global,
+  counter,
+})
+const middlewareEnhancers = applyMiddleware(print1, print2, print3, thunkMiddleware)
+const composedEnhancers = composeWithDevTools({
+  //增加options
+}) || compose
+const store = createStore(rootReducer2, undefined, composedEnhancers(middlewareEnhancers));
+export default store
+```
+
++ `Redux Toolkit`具有一个`configureStore API`，可以简化`store`的设置过程。`configureStore`包装了`Redux`核心的`createStore API`，并自动处理大部分`store`的设置。实际上，我们可以将其简化为一步操作：
+
+```JavaScript
+const rtkStore=configureStore({
+  reducer:{
+    global,
+    counter,
+  }
+})
+```
++ 调用 `configureStore` 一步完成了所有工作：
+  1. 它将`global`和`cunter`组合成`root reducer`函数，该函数将处理类似于`{todos, filters}`的`root state`。(代替了`combineReducer`函数)
+  2. 它使用该`root reducer`创建了一个`Redux store`。(代替了`createStore`函数和`StoreEnhancer`部分)
+  3. 它自动添加了`thunk middleware`中间件。(代替了`redux-thunk`中的`thunk`的部分)
+  4. 它自动添加了更多中间件，以检查常见错误，如意外地变异状态。
+  5. 它自动设置了`Redux DevTools`扩展连接。(代替了`@redux-devtools/extension`的`composeWithDevTools`)
+
+## 5.2 包清理`Package Cleanup`
++ `Redux Toolkit` 已经包含了我们正在使用的几个包，如 `redux`、`redux-thunk`和`reselect`，并重新导出了这些 API。所以，我们可以对项目进行一些清理。
++ 首先，我们可以将`createSelector`的导入切换为从 `@reduxjs/toolkit`而不是 `reselect`。然后，我们可以从 `package.json` 中移除这些单独列出的包。
+
+## 5.3 编写`Slices`
+
+### 1. `createSlice`是干嘛的
++ 随着我们向应用程序添加新功能，`slice`文件变得越来越大且更加复杂。特别是`glboalReducer`因为所有的嵌套对象扩展（用于不可变更新）变得难以阅读，并且我们编写了多个`action creator`函数。
+
++ **`Redux Toolkit` 提供了一个`createSlice API`，可以帮助我们简化`Redux reducer` 逻辑和 `actions`**。
+
++ **在`createSlice`内部，`mutating`代码是可以接受的，因为`Redux Toolkit`使用了`Immer`库来处理状态的不可变性更新。**
++ **这意味着你可以直接修改状态对象，而不需要手动创建其副本。**
+
++ `createSlice` 对我们来说做了几件重要的事情：
+  1. 我们可以将 `case reducer` 编写为对象内部的函数，而不必编写 `switch/case` 语句。
+  2. `Reducer` 可以编写更简短的不可变更新逻辑。
+  3. 所有的`action creator`将根据我们提供的`reducer`函数自动生成。
+
+### 2. 使用`createSlice`
+
+#### 1.生成`action creator`和`reducer`
+
++ `createSlice` 接受一个包含三个主要选项字段的对象：
+  1. name`: 一个字符串，将用作生成的`action`类型的前缀。
+  2. `initialState`: `reducer`的初始状态。
+  3. `reducers`: 一个对象，其中`key`是字符串，`value`是处理特定`actions`的"`case reducer`" 函数。
+
++ 这些选项字段帮助定义和配置一个 `Redux slice`，使得创建`reducer`和相应的`action creators`变得简单和直观。
+
+```JavaScript
+// 使用`rtk`的createSlice,来创建reducer和action creator
+import { createSlice } from "@reduxjs/toolkit";
+import { AuthState } from "../../interface";
+
+const authState:AuthState={
+  roleCode:[1,1,4,5,1,4]
+}
+
+const enum AuthActionTypeEnum{
+  ADD_CODE="addCode",
+  DELETE_CODE="deleteCode"
+}
+
+const authSlice=createSlice({
+  name:"auth",
+  initialState:authState,
+  reducers:{
+    [AuthActionTypeEnum.ADD_CODE]:(state,action)=>{
+      // 在 createSlice 内部，这种“变异”代码是可以接受的，因为 Redux Toolkit 使用了 Immer 库来处理状态的不可变性更新。这意味着你可以直接修改状态对象，而不需要手动创建其副本。
+      state.roleCode.push(action.payload)
+    },
+    [AuthActionTypeEnum.DELETE_CODE]:(state,action)=>{
+      state.roleCode=state.roleCode.filter(item=>item!==action.payload)
+    }
+  }
+})
+
+export const {addCode,deleteCode}=authSlice.actions//addCode,deleteCode都是action creator
+export default authSlice.reducer
+```
+在这个例子中，有几点需要注意:
+  + 我们在`reducers`对象中编写`case reducer`函数，并给它们起可读的名字
+  + `createSlice`将自动生成与我们提供的每个`case reducer`函数相对应的`action creator`
+  + `createSlice`在`default`情况下自动返回现有的状态
+  + **`createSlice`允许我们安全地“`mutate`”我们的`state`!**
+  + 但是，如果我们想的话，也可以像以前一样创建不可变的副本
+
++ 当你使用`createSlice`创建一个`slice`后，生成的`action creators`将作为`slice.actions.addCode`等属性可用。通常我们会像之前手动编写的 `action creators` 一样，解构并单独导出它们。
++ 完整的 `reducer` 函数可以通过 `slice.reducer` 访问，并且通常会像之前一样使用 `export default slice.reducer` 导出。
+
+```JavaScript
+// 打印一下rtk中的createSlice函数返回对象的action creator
+  console.log(addCode(114514))//{type: 'auth/addCode', payload: 114514}
+  ```
++ 使用`createSlice`自动生成了`action.type`字符串，它结合了`slice`的`name`字段和我们编写的`case reducer`函数名`addCode`。默认情况下，`action creator` 接受一个参数，将其作为`payload`放入`action`对象中。
+
++ 在生成的`reducer`函数内部`createSlice`会检查派发的`action`的`action.type`是否与它生成的`action type`匹配。如果匹配，它会执行相应的 `case reducer` 函数。这与我们自己使用 `switch/case` 语句编写的模式完全相同，但 `createSlice` 自动为我们完成了这些工作。
+
+#### 2. 使用`Immer`进行不可变更新`Immutable Updates`
+
++ 之前，我们谈论了`mutation`（直接修改现有对象/数组的值）和`immutability`（将值视为不可更改的内容）的概念。
+
++ `createSlice` 使用了一个名为 `Immer` 的库。`Immer` 使用特殊的 `JavaScript` 工具——代理（`Proxy`），来包装你提供的数据，并允许你编写可以`mutates`这些包装数据的代码。但是，**`Immer`会追踪你尝试进行的所有更改，然后使用这些更改列表来安全地返回一个不可变更新的值，就好像你手动编写了所有不可变更新逻辑一样。**
+
++ `RTk`中使用注意:
+  > 在`Redux Toolkit`的`createSlice`和`createReducer`中，你只能编写`mutating`逻辑，因为它们内部使用了`Immer`！如果在没有`Immer`的情况下在 `reducers`中编写突变逻辑，会导致状态突变并引发`bug`！
+
+#### 3. `createSlice`中`redcures`的`prepare`函数
+
++ 在`createSlice`中，如果需要传递多个参数或者执行一些预处理逻辑（比如生成唯一的 ID），可以通过添加一个"`prepare`回调函数" 来处理这些情况。
++ 我们可以传递一个对象，对象包含名为`reducer`和`prepare`的函数。
++ 当我们**调用**生成的`action creator`时，`prepare`函数将被调用，并传入相应的参数。
++ 这个函数**应该创建并返回一个对象，这个对象应该包含一个`payload`字段**，同时也可以选择性地包含`meta`和`error`字段，符合`Flux Standard Action`规范。
+
+1. 添加一个`uniqueCode`类型
+```JavaScript
+const authSlice = createSlice({
+  name: "auth",
+  initialState: authState,
+  reducers: {
+    [AuthActionTypeEnum.ADD_CODE]: (state, action) => {
+      // 在 createSlice 内部，这种“变异”代码是可以接受的，因为 Redux Toolkit 使用了 Immer 库来处理状态的不可变性更新。这意味着你可以直接修改状态对象，而不需要手动创建其副本。
+      state.roleCode.push(action.payload)
+    },
+    [AuthActionTypeEnum.DELETE_CODE]: (state, action) => {
+      state.roleCode = state.roleCode.filter(item => item !== action.payload)
+    },
+    [AuthActionTypeEnum.UNIQUE_CODE]: {
+      reducer: (state, action) => {
+        console.log('[debug]in reducer函数 prepare函数可以处理改变reducer case中获取的action',)
+        state.roleCode.push(action.payload.time)
+      },
+      prepare: (time: number, text: string) => {
+        console.log("在调用 对应 的action createor时,就会调用prepare函数,并获得对应的参数", 'time=', time, 'text=', text)
+        return {
+          payload: {
+            time: generateUniqueId(time)
+            ,
+            text: text + "mutate"
+          },
+          meta: null,
+          error: false,
+        }
+      }
+    }
+  }
+})
+
+function generateUniqueId (time: number) {
+  return time.toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+export const { addCode, deleteCode,uniqueCode } = authSlice.actions//addCode,deleteCode都是action creator
+```
+
+2. 通过`@reduxjs/toolkit`提供的`createSelector`创建`selector`函数
+
+```JavaScript
+import { createSelector } from "@reduxjs/toolkit";
+import { RootState } from "../../interface/index";
+
+export const authSelector = createSelector(
+  (state: RootState) => state.auth.roleCode,
+  roleCode => roleCode.join(",")
+)
+```
+
+3. 通过`react-redux`提供的`useDispatch`和`useSelector分别来分发`uniqueCode`和获取`roleCode`
+```JavaScript
+import { useSelector, useDispatch } from "react-redux"
+import { Button } from "antd"
+import { uniqueCode } from "../redux/modules/auth/reducer"
+import { authSelector } from "../redux/modules/auth/selector"
+
+const UseReactRedux = () => {
+  const count = useSelector(selectCount)
+  const roleCode = useSelector(authSelector)
+  const dispatch = useDispatch()
+
+  const handleExecuteReducerHasPrepareFn = () => {
+    dispatch(uniqueCode(Date.now(), "哈哈哈"))
+    // 在调用 对应 的action createor时,就会调用prepare函数,并获得对应的参数 time= 1720256204081 text= 哈哈哈
+    // reducer.ts:28 [debug]in reducer函数 prepare函数可以处理改变reducer case中获取的action
+  }
+
+  return (
+    <div>
+      <div>
+        <div>{roleCode}</div>
+        <Button onClick={handleExecuteReducerHasPrepareFn}>执行带有prepare的reducer</Button>
+      </div>
+    </div>
+  )
+}
+```
+
+## 5.4 编写`Thunk`
+
