@@ -31,14 +31,14 @@ const UseReactRedux = () => {
   }
 
   const handleAsyncIncrement = () => {
-    const fetch = (dispatch, getState) => {
+    const fetchTodo = (dispatch, getState) => {
       fetchSomeData().then((res) => {
         const state = getState()
         console.log("state", state.counter.count)
         dispatch(incrementAction(res + state.counter.count))
       })
     }
-    dispatch(fetch);
+    dispatch(fetchTodo);
   }
 
   const handleExecuteReducerHasPrepareFn = () => {

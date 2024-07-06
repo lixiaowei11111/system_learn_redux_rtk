@@ -1,15 +1,40 @@
 // 使用`rtk`的createSlice,来创建reducer和action creator
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { AuthState } from "../../interface";
 
 const authState: AuthState = {
-  roleCode: [1, 1, 4, 5, 1, 4]
+  roleCode: [1, 1, 4, 5, 1, 4],
+  status:"init",
 }
+
+const fetchData = (time: number): Promise<{ time: number }> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (time > 100) {
+        resolve({
+          time: time + 114514
+        })
+      } else {
+        reject({
+          time: 100 * time
+        })
+      }
+
+    }, 3000)
+  })
+}
+
+export const fetchTodos = createAsyncThunk<number,void>('auth/thunkAddCode', async ():Promise<number> => {
+  const res = await fetchData(200);
+  return res.time
+})
+
 
 const enum AuthActionTypeEnum {
   ADD_CODE = "addCode",
   DELETE_CODE = "deleteCode",
-  UNIQUE_CODE = "uniqueCode"
+  UNIQUE_CODE = "uniqueCode",
+  THUNK_ADD_CODE = "thunkAddCode"
 }
 
 const authSlice = createSlice({
@@ -40,13 +65,23 @@ const authSlice = createSlice({
           error: false,
         }
       }
-    }
-  }
+    },
+  },
+  extraReducers: (builder) => {
+    builder.addCase(fetchTodos.pending,(state,action)=>{
+      state.status="loading"
+    })
+    .addCase(fetchTodos.fulfilled,(state,action)=>{
+      const payload=action.payload
+      console.log('[debug] fulfilled payload',payload)
+      state.status="idle"
+    })
+  },
 })
 
 function generateUniqueId (time: number) {
   return time.toString(36) + Math.random().toString(36).substr(2, 5);
 }
 
-export const { addCode, deleteCode,uniqueCode } = authSlice.actions//addCode,deleteCode都是action creator
+export const { addCode, deleteCode, uniqueCode } = authSlice.actions//addCode,deleteCode都是action creator
 export default authSlice.reducer

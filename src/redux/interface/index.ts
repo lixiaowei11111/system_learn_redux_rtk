@@ -7,7 +7,8 @@ export interface CounterState{
 }
 
 export interface AuthState{
-  roleCode:number[]
+  roleCode:number[],
+  status:string
 }
 export interface RootState{
   global:GlobalState,

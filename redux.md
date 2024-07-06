@@ -1098,4 +1098,16 @@ const UseReactRedux = () => {
 ```
 
 ## 5.4 编写`Thunk`
+//TODO 以后用到再来梳理
++ 我们已经看到如何编写`thunks`来触发`“loading”`、`“request succeeded”`和`“request failed”`操作。我们必须编写`action creators`, `action types`和`reducers`来处理这些情况。
 
++ 因为这种模式太常见了，所以`Redux Toolkit`提供了`createAsyncThunk API`来为我们生成这些`thunk`。它还为那些不同的`request status`动作生成动作类型和动作创建器，并根据产生的`Promise`自动分发这些动作。
+
+### 1. 使用`createAsyncThunk`
++ 让我们用`createAsyncThunk`生成一个`thunk`来替换`fetchTodos`中的`thunk`。
++ `createAsyncThunk`接受两个参数:
+  + 一个字符串，将被用作生成的操作类型的前缀
+  + 一个应该返回一个`Promise`的`“payload creator”`回调函数。这通常使用`async/await`语法编写，因为`async`函数自动返回一个`promise`。
+
+## 5.5 标准化`state`
+// TODO 以后用到再来梳理
