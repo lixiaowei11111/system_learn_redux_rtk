@@ -1,7 +1,7 @@
 import { Button } from "antd";
 import { useEffect,useState } from "react";
 import store from "../redux";
-import { CounterActionTypeEnum } from "../redux/modules/counter/action";
+import { CounterActionTypeEnum } from "../redux/modules/counter/reducer";
 
 const fetchSomeData=()=>{
   return new Promise((resolve,reject)=>{

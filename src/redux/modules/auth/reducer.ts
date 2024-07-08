@@ -68,7 +68,7 @@ const authSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    builder.addCase(fetchTodos.pending,(state,action)=>{
+    builder.addCase(fetchTodos.pending,(state,_action)=>{
       state.status="loading"
     })
     .addCase(fetchTodos.fulfilled,(state,action)=>{

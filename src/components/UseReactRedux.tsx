@@ -1,18 +1,18 @@
-import { useSelector, useDispatch } from "react-redux"
+import { useAppSelector as useSelector,useAppDispatch as useDispatch } from "../redux/hook"
 
 import { selectCount, selectCountByCreateSelector } from "../redux/modules/counter/selector"
-import { incrementAction, decrementAction } from "../redux/modules/counter/action"
+import { increment as incrementAction, decrement as decrementAction,fetchCounterData } from "../redux/modules/counter/reducer"
 import { Button } from "antd"
 import { addCode, uniqueCode } from "../redux/modules/auth/reducer"
 import { authSelector } from "../redux/modules/auth/selector"
 
-const fetchSomeData = () => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      resolve(5)
-    }, 5000)
-  })
-}
+// const fetchSomeData = () => {
+//   return new Promise((resolve, _reject) => {
+//     setTimeout(() => {
+//       resolve(5)
+//     }, 5000)
+//   })
+// }
 
 const UseReactRedux = () => {
 
@@ -31,14 +31,15 @@ const UseReactRedux = () => {
   }
 
   const handleAsyncIncrement = () => {
-    const fetchTodo = (dispatch, getState) => {
-      fetchSomeData().then((res) => {
-        const state = getState()
-        console.log("state", state.counter.count)
-        dispatch(incrementAction(res + state.counter.count))
-      })
-    }
-    dispatch(fetchTodo);
+    // const fetchTodo = (dispatch, getState) => {
+    //   fetchSomeData().then((res) => {
+    //     const state = getState()
+    //     console.log("state", state.counter.count)
+    //     dispatch(incrementAction(res + state.counter.count))
+    //   })
+    // }
+    // dispatch(fetchTodo);
+    dispatch(fetchCounterData(222));
   }
 
   const handleExecuteReducerHasPrepareFn = () => {
